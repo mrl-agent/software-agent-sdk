@@ -29,12 +29,14 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     computed_field,
     field_serializer,
     field_validator,
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from openhands.sdk.logger import get_logger
 from openhands.sdk.security import risk
 from openhands.sdk.tool.schema import Action, Observation, Schema
 from openhands.sdk.utils.models import (
@@ -42,6 +44,9 @@ from openhands.sdk.utils.models import (
     get_known_concrete_subclasses,
     kind_of,
 )
+
+
+logger = get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -547,7 +552,29 @@ class ToolDefinition[ActionT, ObservationT](DiscriminatedUnionMixin, ABC):
     def action_from_arguments(self, arguments: dict[str, Any]) -> Action:
         """Create an action from parsed arguments."""
         action_arguments, structured_output = self._split_response_arguments(arguments)
-        action = self.action_type.model_validate(action_arguments)
+        try:
+            action = self.action_type.model_validate(action_arguments)
+        except ValidationError as exc:
+            errors = exc.errors(include_input=False)
+            # Only recover extras at the invocation root, never nested/other errors.
+            if any(
+                error["type"] != "extra_forbidden" or len(error["loc"]) != 1
+                for error in errors
+            ):
+                raise
+            unexpected = {error["loc"][0] for error in errors}
+            action = self.action_type.model_validate(
+                {
+                    key: value
+                    for key, value in action_arguments.items()
+                    if key not in unexpected
+                }
+            )
+            logger.warning(
+                "Ignoring unexpected parameters %s for tool '%s'",
+                sorted(unexpected),
+                self.name,
+            )
         action._structured_output = structured_output
         return action
 

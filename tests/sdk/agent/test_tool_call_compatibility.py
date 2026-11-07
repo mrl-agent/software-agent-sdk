@@ -191,6 +191,33 @@ def _run_tool_call(
     return events
 
 
+def test_think_extra_parameter_does_not_reject_agent_turn(tmp_path):
+    events = _run_tool_call(
+        tmp_path,
+        tool_name="think",
+        arguments={"thought": "synthetic boundary replay", "timeout": 45},
+        tool_names=(),
+    )
+    assert not any(isinstance(e, AgentErrorEvent) for e in events)
+    action = next(e for e in events if isinstance(e, ActionEvent))
+    assert action.action is not None
+    assert getattr(action.action, "thought") == "synthetic boundary replay"
+    assert any(isinstance(e, ObservationEvent) for e in events)
+
+
+def test_think_missing_required_parameter_still_returns_error_event(tmp_path):
+    events = _run_tool_call(
+        tmp_path,
+        tool_name="think",
+        arguments={"timeout": 45},
+        tool_names=(),
+    )
+    action = next(e for e in events if isinstance(e, ActionEvent))
+    assert action.action is None
+    assert any(isinstance(e, AgentErrorEvent) for e in events)
+    assert not any(isinstance(e, ObservationEvent) for e in events)
+
+
 def test_bash_alias_executes_terminal_tool(tmp_path):
     events = _run_tool_call(
         tmp_path,
