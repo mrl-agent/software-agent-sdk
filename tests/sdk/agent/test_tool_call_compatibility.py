@@ -24,6 +24,7 @@ from openhands.sdk.event import ActionEvent, AgentErrorEvent, ObservationEvent
 from openhands.sdk.llm import LLM, Message, TextContent
 from openhands.sdk.llm.mixins import fn_call_converter
 from openhands.sdk.tool import Action, Observation, Tool, ToolExecutor, register_tool
+from openhands.sdk.tool.builtins.think import ThinkTool
 from openhands.sdk.tool.tool import ToolDefinition
 
 
@@ -128,6 +129,9 @@ class _FileEditorTool(ToolDefinition[_FileEditorAction, _FileEditorObservation])
 register_tool(TERMINAL_TOOL_SPEC, _TerminalTool)
 register_tool(FILE_EDITOR_TOOL_SPEC, _FileEditorTool)
 
+THINK_TOOL_SPEC = "ThinkTool"
+register_tool(THINK_TOOL_SPEC, ThinkTool)
+
 
 def _make_agent(*tool_specs: str) -> Agent:
     llm = LLM(
@@ -196,7 +200,7 @@ def test_think_extra_parameter_does_not_reject_agent_turn(tmp_path):
         tmp_path,
         tool_name="think",
         arguments={"thought": "synthetic boundary replay", "timeout": 45},
-        tool_names=(),
+        tool_names=(THINK_TOOL_SPEC,),
     )
     assert not any(isinstance(e, AgentErrorEvent) for e in events)
     action = next(e for e in events if isinstance(e, ActionEvent))
@@ -210,7 +214,7 @@ def test_think_missing_required_parameter_still_returns_error_event(tmp_path):
         tmp_path,
         tool_name="think",
         arguments={"timeout": 45},
-        tool_names=(),
+        tool_names=(THINK_TOOL_SPEC,),
     )
     action = next(e for e in events if isinstance(e, ActionEvent))
     assert action.action is None
